@@ -3,7 +3,10 @@ import json
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from pydantic import ValidationError
+
 from gt_claude.core.bus.envelope import (
+    INVALID_REQUEST,
     METHOD_NOT_FOUND,
     JsonRpcError,
     JsonRpcRequest,
@@ -67,8 +70,12 @@ class SocketServer:
 
     # 分发一行 JSON-RPC 请求到对应 handler，并包装成响应 envelope
     async def _dispatch_line(self, line: bytes) -> JsonRpcSuccess | JsonRpcError:
-        raw = json.loads(line.decode())
-        request = JsonRpcRequest.model_validate(raw)
+        try:
+            raw = json.loads(line.decode())
+            request = JsonRpcRequest.model_validate(raw)
+        except (json.JSONDecodeError, UnicodeDecodeError, ValidationError) as exc:
+            return make_error(id=None, code=INVALID_REQUEST, message=str(exc))
+
         handler = self._handlers.get(request.method)
         if handler is None:
             return make_error(

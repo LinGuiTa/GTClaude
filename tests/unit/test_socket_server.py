@@ -2,7 +2,7 @@ import asyncio
 import json
 from typing import Any
 
-from gt_claude.core.bus.envelope import METHOD_NOT_FOUND
+from gt_claude.core.bus.envelope import INVALID_REQUEST, METHOD_NOT_FOUND
 from gt_claude.core.transport.socket_server import SocketServer
 
 
@@ -62,5 +62,31 @@ def test_socket_server_returns_method_not_found_for_unknown_method() -> None:
         assert response["id"] == "u-404"
         assert response["error"]["code"] == METHOD_NOT_FOUND
         assert response["error"]["message"] == "method not found: missing.method"
+
+    asyncio.run(scenario())
+
+
+# 功能：验证客户端发送非法 JSON 时，server 返回 INVALID_REQUEST 错误
+# 设计：直接发送 not-json 换行，覆盖网络层最早可能遇到的输入格式错误
+def test_socket_server_returns_invalid_request_for_malformed_json() -> None:
+    async def scenario() -> None:
+        server = SocketServer(host="127.0.0.1", port=0)
+        await server.start()
+        assert server.bound_port is not None
+
+        try:
+            reader, writer = await asyncio.open_connection("127.0.0.1", server.bound_port)
+            writer.write(b"not-json\n")
+            await writer.drain()
+            line = await reader.readline()
+            writer.close()
+            await writer.wait_closed()
+        finally:
+            await server.stop()
+
+        response = json.loads(line.decode())
+        assert response["jsonrpc"] == "2.0"
+        assert response["id"] is None
+        assert response["error"]["code"] == INVALID_REQUEST
 
     asyncio.run(scenario())
