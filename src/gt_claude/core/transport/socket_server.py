@@ -3,7 +3,13 @@ import json
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from gt_claude.core.bus.envelope import JsonRpcRequest, JsonRpcSuccess
+from gt_claude.core.bus.envelope import (
+    METHOD_NOT_FOUND,
+    JsonRpcError,
+    JsonRpcRequest,
+    JsonRpcSuccess,
+    make_error,
+)
 
 # Handler 是 daemon 内部处理某个 method 的异步函数
 Handler = Callable[[dict[str, Any]], Awaitable[dict[str, Any]]]
@@ -59,10 +65,17 @@ class SocketServer:
             writer.close()
             await writer.wait_closed()
 
-    # 分发一行 JSON-RPC 请求到对应 handler，并包装成成功响应
-    async def _dispatch_line(self, line: bytes) -> JsonRpcSuccess:
+    # 分发一行 JSON-RPC 请求到对应 handler，并包装成响应 envelope
+    async def _dispatch_line(self, line: bytes) -> JsonRpcSuccess | JsonRpcError:
         raw = json.loads(line.decode())
         request = JsonRpcRequest.model_validate(raw)
-        handler = self._handlers[request.method]
+        handler = self._handlers.get(request.method)
+        if handler is None:
+            return make_error(
+                id=request.id,
+                code=METHOD_NOT_FOUND,
+                message=f"method not found: {request.method}",
+            )
+
         result = await handler(request.params)
         return JsonRpcSuccess(id=request.id, result=result)
