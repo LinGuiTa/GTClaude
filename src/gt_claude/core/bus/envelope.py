@@ -15,3 +15,14 @@ class JsonRpcRequest(BaseModel):
 
     # 请求参数；不同 method 会有不同参数，所以这里先用通用 dict 承载
     params: dict[str, Any] = Field(default_factory=dict)
+
+
+class JsonRpcSuccess(BaseModel):
+    # JSON-RPC 固定协议版本；成功响应也必须标明协议版本
+    jsonrpc: Literal["2.0"] = "2.0"
+
+    # 请求 ID；必须和请求里的 id 一致，客户端靠它匹配响应
+    id: str
+
+    # 成功结果；不同 method 的 result 结构不同，所以先用通用 dict 承载
+    result: dict[str, Any]
